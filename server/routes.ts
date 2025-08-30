@@ -106,7 +106,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           originalName: file.originalname,
           mimeType: file.mimetype,
           size: file.size,
-          category
+          category,
+          path: permanentPath
         };
 
         const savedFile = await storage.createFile(fileData);

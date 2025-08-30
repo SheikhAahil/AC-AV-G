@@ -1,5 +1,6 @@
-import { type User, type InsertUser, type File, type InsertFile } from "@shared/schema";
-import { randomUUID } from "crypto";
+import { users, files, type User, type InsertUser, type File, type InsertFile } from "@shared/schema";
+import { db } from "./db";
+import { eq, desc, like, and, or } from "drizzle-orm";
 
 export interface IStorage {
   getUser(id: string): Promise<User | undefined>;
@@ -15,76 +16,84 @@ export interface IStorage {
   searchFiles(query: string, category?: string, mimeType?: string): Promise<File[]>;
 }
 
-export class MemStorage implements IStorage {
-  private users: Map<string, User>;
-  private files: Map<string, File>;
-
-  constructor() {
-    this.users = new Map();
-    this.files = new Map();
-  }
-
+export class DatabaseStorage implements IStorage {
   async getUser(id: string): Promise<User | undefined> {
-    return this.users.get(id);
+    const [user] = await db.select().from(users).where(eq(users.id, id));
+    return user || undefined;
   }
 
   async getUserByUsername(username: string): Promise<User | undefined> {
-    return Array.from(this.users.values()).find(
-      (user) => user.username === username,
-    );
+    const [user] = await db.select().from(users).where(eq(users.username, username));
+    return user || undefined;
   }
 
   async createUser(insertUser: InsertUser): Promise<User> {
-    const id = randomUUID();
-    const user: User = { ...insertUser, id };
-    this.users.set(id, user);
+    const [user] = await db
+      .insert(users)
+      .values(insertUser)
+      .returning();
     return user;
   }
 
   async createFile(insertFile: InsertFile): Promise<File> {
-    const id = randomUUID();
-    const file: File = { 
-      ...insertFile, 
-      id,
-      uploadedAt: new Date()
-    };
-    this.files.set(id, file);
+    const [file] = await db
+      .insert(files)
+      .values(insertFile)
+      .returning();
     return file;
   }
 
   async getFile(id: string): Promise<File | undefined> {
-    return this.files.get(id);
+    const [file] = await db.select().from(files).where(eq(files.id, id));
+    return file || undefined;
   }
 
   async getFiles(): Promise<File[]> {
-    return Array.from(this.files.values()).sort(
-      (a, b) => b.uploadedAt.getTime() - a.uploadedAt.getTime()
-    );
+    return await db
+      .select()
+      .from(files)
+      .orderBy(desc(files.uploadedAt));
   }
 
   async getFilesByCategory(category: string): Promise<File[]> {
-    return Array.from(this.files.values())
-      .filter(file => file.category === category)
-      .sort((a, b) => b.uploadedAt.getTime() - a.uploadedAt.getTime());
+    return await db
+      .select()
+      .from(files)
+      .where(eq(files.category, category))
+      .orderBy(desc(files.uploadedAt));
   }
 
   async deleteFile(id: string): Promise<boolean> {
-    return this.files.delete(id);
+    const result = await db.delete(files).where(eq(files.id, id));
+    return (result.rowCount ?? 0) > 0;
   }
 
   async searchFiles(query: string, category?: string, mimeType?: string): Promise<File[]> {
-    const queryLower = query.toLowerCase();
+    const conditions = [];
     
-    return Array.from(this.files.values())
-      .filter(file => {
-        const matchesQuery = file.originalName.toLowerCase().includes(queryLower);
-        const matchesCategory = !category || file.category === category;
-        const matchesMimeType = !mimeType || file.mimeType.includes(mimeType);
-        
-        return matchesQuery && matchesCategory && matchesMimeType;
-      })
-      .sort((a, b) => b.uploadedAt.getTime() - a.uploadedAt.getTime());
+    if (query) {
+      const searchTerm = `%${query.toLowerCase()}%`;
+      conditions.push(like(files.originalName, searchTerm));
+    }
+    
+    if (category) {
+      conditions.push(eq(files.category, category));
+    }
+    
+    if (mimeType) {
+      conditions.push(like(files.mimeType, `%${mimeType}%`));
+    }
+    
+    if (conditions.length === 0) {
+      return await this.getFiles();
+    }
+    
+    return await db
+      .select()
+      .from(files)
+      .where(conditions.length === 1 ? conditions[0] : and(...conditions))
+      .orderBy(desc(files.uploadedAt));
   }
 }
 
-export const storage = new MemStorage();
+export const storage = new DatabaseStorage();

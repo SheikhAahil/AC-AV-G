@@ -1,10 +1,10 @@
 import { Eye, Download, FileText, Image, FileSpreadsheet } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { FileData, fileStorage } from "@/lib/fileStorage";
+import { File } from "@shared/schema";
 
 interface FileCardProps {
-  file: FileData;
-  onPreview: (file: FileData) => void;
+  file: File;
+  onPreview: (file: File) => void;
 }
 
 export default function FileCard({ file, onPreview }: FileCardProps) {
@@ -35,14 +35,13 @@ export default function FileCard({ file, onPreview }: FileCardProps) {
   };
 
   const handleDownload = () => {
-    const url = fileStorage.getFileUrl(file);
     const link = document.createElement('a');
-    link.href = url;
+    link.href = `/api/files/${file.id}/download`;
     link.download = file.originalName;
+    link.target = '_blank';
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-    URL.revokeObjectURL(url);
   };
 
   return (

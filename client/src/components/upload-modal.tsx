@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
-import { fileStorage } from "@/lib/fileStorage";
+import { apiRequest } from "@/lib/queryClient";
 
 interface UploadModalProps {
   isOpen: boolean;
@@ -28,7 +28,18 @@ export default function UploadModal({ isOpen, onClose }: UploadModalProps) {
 
   const uploadMutation = useMutation({
     mutationFn: async () => {
-      // Simulate progress for demo purposes
+      if (!category) {
+        throw new Error("Please select a category");
+      }
+
+      const formData = new FormData();
+      formData.append('category', category);
+      
+      selectedFiles.forEach((file) => {
+        formData.append('files', file);
+      });
+
+      // Simulate progress for visual feedback
       const progressInterval = setInterval(() => {
         setUploadProgress(prev => {
           if (prev >= 90) {
@@ -40,10 +51,20 @@ export default function UploadModal({ isOpen, onClose }: UploadModalProps) {
       }, 200);
 
       try {
-        const result = await fileStorage.uploadFiles(selectedFiles, category);
+        const response = await fetch('/api/files/upload', {
+          method: 'POST',
+          body: formData,
+        });
+
         clearInterval(progressInterval);
         setUploadProgress(100);
-        return result;
+
+        if (!response.ok) {
+          const error = await response.json();
+          throw new Error(error.message || 'Upload failed');
+        }
+
+        return await response.json();
       } catch (error) {
         clearInterval(progressInterval);
         throw error;
@@ -54,8 +75,7 @@ export default function UploadModal({ isOpen, onClose }: UploadModalProps) {
         title: "Success",
         description: "Files uploaded successfully!",
       });
-      // Trigger a storage event to refresh file lists across components
-      window.dispatchEvent(new Event('storage'));
+      queryClient.invalidateQueries({ queryKey: ['/api/files'] });
       handleClose();
     },
     onError: (error: Error) => {

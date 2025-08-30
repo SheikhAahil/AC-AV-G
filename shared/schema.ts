@@ -16,6 +16,7 @@ export const files = pgTable("files", {
   mimeType: text("mime_type").notNull(),
   size: integer("size").notNull(),
   category: text("category").notNull(),
+  path: text("path").notNull(),
   uploadedAt: timestamp("uploaded_at").defaultNow().notNull(),
 });
 
